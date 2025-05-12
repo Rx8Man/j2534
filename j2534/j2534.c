@@ -51,7 +51,7 @@ typedef struct _connection
 {
 	uint8_t device_id;
 	int8_t  channel;
-	unsigned long protocol_id;
+	unsigned int protocol_id;
 	struct libusb_context *ctx;
 	struct libusb_device_handle *dev_handle;
 } connection_t;
@@ -80,7 +80,7 @@ int8_t LAST_ERROR[LE_LEN];
 int littleEndian = TRUE;
 int write_log = FALSE;
 int8_t log_msg[LM_LEN];
-unsigned long rx_buf_idx = 0;
+unsigned int rx_buf_idx = 0;
 char fw_version[MAX_LEN];
 FILE *logfile;
 connection_t con[1];
@@ -108,9 +108,9 @@ static void writeloghex(const int8_t num)
 	fprintf(logfile, "%02X ", (uint8_t)num);
 }
 
-static void writelogmsg(const uint8_t *data, const unsigned long start, const unsigned long len)
+static void writelogmsg(const uint8_t *data, const unsigned int start, const unsigned int len)
 {
-	unsigned long i = start;
+	unsigned int i = start;
 	for (; i < len; i++)
 		fprintf(logfile, "%02X ", (uint8_t)data[i]);
 }
@@ -172,7 +172,7 @@ static uint32_t bswap(const uint32_t bytes)
 
 /*
   Parse a timestamp. This parse_ts function parses four bytes from
-  the given data array and copies them to a long, then swaps them
+  the given data array and copies them to a int, then swaps them
   based on the processor endian.
  */
 static uint32_t parse_ts(const void *data)
@@ -328,7 +328,7 @@ static int error_map(const int usb_err)
 /*
 	Check if characters converted correctly to a number
 */
-static int is_valid(const unsigned long value)
+static int is_valid(const unsigned int value)
 {
 	if (value == 0)
 	{
@@ -535,7 +535,7 @@ static int usb_send_expect(uint8_t *data, const size_t len,
 
 				if (data[2] == 0x65)	// e
 				{
-					unsigned long errnum = strtoul(data + 4, NULL, 10);
+					unsigned int errnum = strtoul(data + 4, NULL, 10);
 					if (is_valid(errnum))
 					{
 						snprintf(LAST_ERROR, LE_LEN, "Error: J2534 device comms error: %lu", errnum);
@@ -575,7 +575,7 @@ static int usb_send_expect(uint8_t *data, const size_t len,
 /*
   Establish a connection with a PassThru device.
  */
-int32_t PassThruOpen(const void *pName, unsigned long *pDeviceID)
+int32_t PassThruOpen(const void *pName, unsigned int *pDeviceID)
 {
 	if (pDeviceID == NULL)
 	{
@@ -712,7 +712,7 @@ int32_t PassThruOpen(const void *pName, unsigned long *pDeviceID)
 /*
   Terminate a connection with a Pass-Thru device.
  */
-int32_t PassThruClose(const unsigned long DeviceID)
+int32_t PassThruClose(const unsigned int DeviceID)
 {
 	if (write_log)
 	{
@@ -747,8 +747,8 @@ int32_t PassThruClose(const unsigned long DeviceID)
 /*
   Establish a connection using a protocol channel.
  */
-int32_t PassThruConnect(const unsigned long DeviceID, const unsigned long protocolID,
-	const unsigned long flags, const unsigned long baud, unsigned long *pChannelID)
+int32_t PassThruConnect(const unsigned int DeviceID, const unsigned int protocolID,
+	const unsigned int flags, const unsigned int baud, unsigned int *pChannelID)
 {
 	if (write_log)
 	{
@@ -799,7 +799,7 @@ int32_t PassThruConnect(const unsigned long DeviceID, const unsigned long protoc
 /*
   Terminate a connection with a protocol channel.
  */
-int32_t PassThruDisconnect(const unsigned long ChannelID)
+int32_t PassThruDisconnect(const unsigned int ChannelID)
 {
 	if (write_log)
 	{
@@ -828,8 +828,8 @@ int32_t PassThruDisconnect(const unsigned long ChannelID)
 /*
   Read message(s) from a protocol channel.
  */
-int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
-	unsigned long *pNumMsgs, const unsigned long Timeout)
+int32_t PassThruReadMsgs(const unsigned int ChannelID, PASSTHRU_MSG *pMsg,
+	unsigned int *pNumMsgs, const unsigned int Timeout)
 {
 	if (pMsg == NULL)
 	{
@@ -845,7 +845,7 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 
 	int8_t channel = con->channel;
 	uint32_t timeout = Timeout;
-	unsigned long msg_cnt = *pNumMsgs;	// number of msgs to read into pMsg array
+	unsigned int msg_cnt = *pNumMsgs;	// number of msgs to read into pMsg array
 	rx_buf_idx = 0;
 
 	if (write_log)
@@ -948,7 +948,7 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 						uint8_t channel_id = data[bytes_processed + 2];
 						uint8_t packet_type = data[bytes_processed + 4];
 						int8_t *msg_type = "";
-						unsigned long dataSize = 0;
+						unsigned int dataSize = 0;
 
 						// Message Type check
 						// TxDone Msg 0x10
@@ -1040,8 +1040,17 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 							if (channel_id == CAN || channel_id == ISO15765)	// CAN message
 							{
 								msgBuf->Timestamp = parse_ts(data + pos);
-								datacopy(msgBuf, data, 4, pos, (data[len] - 1));
-								dataSize = msgBuf->DataSize + (data[len] - 5);
+								if (data[3] == 0x4F) {
+
+									datacopy(msgBuf, data, 8, pos, (data[len] -1));
+									dataSize = msgBuf->DataSize + (data[len] - 9);
+								}
+								else {
+									datacopy(msgBuf, data, 4, pos, (data[len] - 1));
+									dataSize = msgBuf->DataSize + (data[len] - 5);
+								}
+
+
 								msgBuf->DataSize = dataSize;
 								msgBuf->ExtraDataIndex = dataSize;
 							}
@@ -1103,8 +1112,15 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 							msgBuf->Timestamp = parse_ts(data + pos);
 							if (channel_id == CAN || channel_id == ISO15765)	// CAN message
 							{
-								datacopy(msgBuf, data, 4, pos, (data[len] - 1));
-								dataSize = msgBuf->DataSize + (data[len] - 5);
+
+								if ((data[3] & 0x30) && (msgBuf->DataSize > 0)) {
+									datacopy(msgBuf, data, 8, pos, (data[len] - 1));
+									dataSize = msgBuf->DataSize + (data[len] - 9);
+								}
+								else {
+									datacopy(msgBuf, data, 4, pos, (data[len] - 1));
+									dataSize = msgBuf->DataSize + (data[len] - 5);
+								}
 								msgBuf->DataSize = dataSize;
 								msgBuf->ExtraDataIndex = dataSize;
 								msgBuf->RxStatus = 0;	// RX Indication
@@ -1229,8 +1245,8 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 /*
   Write message(s) to a protocol channel.
  */
-int32_t PassThruWriteMsgs(const unsigned long ChannelID, const PASSTHRU_MSG *pMsg,
-	unsigned long *pNumMsgs, const unsigned long timeInterval)
+int32_t PassThruWriteMsgs(const unsigned int ChannelID, const PASSTHRU_MSG *pMsg,
+	unsigned int *pNumMsgs, const unsigned int timeInterval)
 {
 	if (write_log)
 	{
@@ -1244,7 +1260,7 @@ int32_t PassThruWriteMsgs(const unsigned long ChannelID, const PASSTHRU_MSG *pMs
 		writelogpassthrumsg(pMsg);
 	}
 
-	unsigned long msg_cnt = *pNumMsgs, i = 0, msg_data_size = 0;
+	unsigned int msg_cnt = *pNumMsgs, i = 0, msg_data_size = 0;
 	int r = LIBUSB_SUCCESS;
 	uint8_t data[PM_DATA_LEN];
 	size_t strln = 0;
@@ -1285,8 +1301,8 @@ int32_t PassThruWriteMsgs(const unsigned long ChannelID, const PASSTHRU_MSG *pMs
 /*
   Start sending a message at a specified time interval on a protocol channel.
  */
-int32_t PassThruStartPeriodicMsg(const unsigned long ChannelID, const PASSTHRU_MSG *pMsg,
-	const unsigned long *pMsgID, const unsigned long timeInterval)
+int32_t PassThruStartPeriodicMsg(const unsigned int ChannelID, const PASSTHRU_MSG *pMsg,
+	const unsigned int *pMsgID, const unsigned int timeInterval)
 {
 	if (write_log)
 		writelog("StartPeriodic, not supported\n");
@@ -1296,7 +1312,7 @@ int32_t PassThruStartPeriodicMsg(const unsigned long ChannelID, const PASSTHRU_M
 /*
   Stop a periodic message.
  */
-int32_t PassThruStopPeriodicMsg(const unsigned long ChannelID, const unsigned long msgID)
+int32_t PassThruStopPeriodicMsg(const unsigned int ChannelID, const unsigned int msgID)
 {
 	if (write_log)
 		writelog("StopPeriodic, not supported\n");
@@ -1306,9 +1322,9 @@ int32_t PassThruStopPeriodicMsg(const unsigned long ChannelID, const unsigned lo
 /*
   Start filtering incoming messages on a protocol channel.
  */
-int32_t PassThruStartMsgFilter(const unsigned long ChannelID, const unsigned long FilterType,
+int32_t PassThruStartMsgFilter(const unsigned int ChannelID, const unsigned int FilterType,
 	const PASSTHRU_MSG *pMaskMsg, const PASSTHRU_MSG *pPatternMsg,
-	const PASSTHRU_MSG *pFlowControlMsg, unsigned long *pMsgID)
+	const PASSTHRU_MSG *pFlowControlMsg, unsigned int *pMsgID)
 {
 	if (write_log)
 	{
@@ -1391,7 +1407,7 @@ int32_t PassThruStartMsgFilter(const unsigned long ChannelID, const unsigned lon
 		word = strtok(NULL, DELIMITERS);
 		if (word)
 		{
-			unsigned long lval = strtoul(word, NULL, 10);
+			unsigned int lval = strtoul(word, NULL, 10);
 			if (is_valid(lval))
 				*pMsgID = lval;
 			else
@@ -1417,7 +1433,7 @@ int32_t PassThruStartMsgFilter(const unsigned long ChannelID, const unsigned lon
 /*
   Stops filtering incoming messages on a protocol channel.
  */
-int32_t PassThruStopMsgFilter(const unsigned long ChannelID, const unsigned long msgID)
+int32_t PassThruStopMsgFilter(const unsigned int ChannelID, const unsigned int msgID)
 {
 	if (write_log)
 	{
@@ -1449,8 +1465,8 @@ int32_t PassThruStopMsgFilter(const unsigned long ChannelID, const unsigned long
 /*
   Set a programming voltage on a specific pin.
  */
-int32_t PassThruSetProgrammingVoltage(const unsigned long DeviceID,
-	const unsigned long pinNumber, const unsigned long voltage)
+int32_t PassThruSetProgrammingVoltage(const unsigned int DeviceID,
+	const unsigned int pinNumber, const unsigned int voltage)
 {
 	if (write_log)
 		writelog("SetProgrammingVoltage, not support\n");
@@ -1460,7 +1476,7 @@ int32_t PassThruSetProgrammingVoltage(const unsigned long DeviceID,
 /*
   Reads the version information of the firmware, this DLL and API implmentation.
  */
-int32_t PassThruReadVersion(const unsigned long DeviceID, char *pFirmwareVersion,
+int32_t PassThruReadVersion(const unsigned int DeviceID, char *pFirmwareVersion,
 	char *pDllVersion, char *pApiVersion)
 {
 	if (pFirmwareVersion == NULL || pDllVersion == NULL
@@ -1542,7 +1558,7 @@ int32_t PassThruGetLastError(char *pErrorDescription)
   protocol configuration parameters (e.g. initialization,
   baud rates, programming voltages, etc.).
  */
-int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID,
+int32_t PassThruIoctl(const unsigned int ChannelID, const unsigned int ioctlID,
 	const void *pInput, void *pOutput)
 {
 	if (write_log)
@@ -1597,7 +1613,7 @@ int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID
 					goto EXIT_IOCTL;
 				}
 
-				unsigned long lval = strtoul(word, NULL, 10);
+				unsigned int lval = strtoul(word, NULL, 10);
 				if (is_valid(lval))
 					cfgitem->Parameter = lval;
 
@@ -1679,7 +1695,7 @@ int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID
 			goto EXIT_IOCTL;
 		}
 
-		unsigned long lval = strtoul(word, NULL, 10);
+		unsigned int lval = strtoul(word, NULL, 10);
 		if (is_valid(lval))
 		{
 			if (pin == lval)
@@ -1725,7 +1741,7 @@ int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID
 		}
 
 		const PASSTHRU_MSG *pMsg = pInput;
-		unsigned long len = pMsg->DataSize;
+		unsigned int len = pMsg->DataSize;
 		if (len > 0 && len <= MAX_LEN)
 		{
 			if (write_log)
@@ -1745,7 +1761,7 @@ int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID
 			len = strtoul(data + 5, NULL, 10);
 			if (len == 0)
 			{
-				snprintf(LAST_ERROR, LE_LEN, "Error: failed to convert to long");
+				snprintf(LAST_ERROR, LE_LEN, "Error: failed to convert to int");
 				r = J2534_ERR_FAILED;
 				goto EXIT_IOCTL;
 			}
